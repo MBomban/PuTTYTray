@@ -783,7 +783,7 @@ void showeventlog(HWND hwnd)
     if (!logbox) {
 	logbox = CreateDialog(hinst, MAKEINTRESOURCE(IDD_LOGBOX),
 			      hwnd, LogProc);
-	ShowWindow(logbox, SW_SHOWNORMAL);
+	ShowWindow(logbox, SW_SHOWMAXIMIZED);
     }
     SetActiveWindow(logbox);
 }
