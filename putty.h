@@ -106,6 +106,7 @@ typedef struct terminal_tag Terminal;
 
 #define ATTR_NARROW  0x800000U
 #define ATTR_WIDE    0x400000U
+#define ATTR_ITALIC  0x1000000U
 #define ATTR_BOLD    0x040000U
 #define ATTR_UNDER   0x080000U
 #define ATTR_REVERSE 0x100000U
@@ -808,6 +809,7 @@ void cleanup_exit(int);
     X(INT, NONE, width) \
     X(INT, NONE, height) \
     X(FONT, NONE, font) \
+	X(INT, NONE, use_italic) \
     X(INT, NONE, font_quality) \
     X(FILENAME, NONE, logfilename) \
     X(INT, NONE, logtype) \
