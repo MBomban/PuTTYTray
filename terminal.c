@@ -288,6 +288,17 @@ static int termchars_equal_override(termchar *a, termchar *b,
 				    unsigned long bchr, unsigned long battr)
 {
     /* FULL-TERMCHAR */
+	if (a->colourinfo.tf != b->colourinfo.tf ||
+		a->colourinfo.tb != b->colourinfo.tb ||
+		a->colourinfo.fr != b->colourinfo.fr ||
+		a->colourinfo.fg != b->colourinfo.fg ||
+		a->colourinfo.fb != b->colourinfo.fb ||
+		a->colourinfo.br != b->colourinfo.br ||
+		a->colourinfo.bg != b->colourinfo.bg ||
+		a->colourinfo.bb != b->colourinfo.bb
+		) {
+		return FALSE;
+	}
     if (a->chr != bchr)
 	return FALSE;
     if ((a->attr &~ DATTR_MASK) != (battr &~ DATTR_MASK))
@@ -612,6 +623,27 @@ static void makeliteral_attr(struct buf *b, termchar *c, unsigned long *state)
 	add(b, (unsigned char)(attr & 0xFF));
     }
 }
+static void makeliteral_colourinfo(struct buf *b, termchar *c, unsigned long *state)
+{
+	/**
+	 * Put the used parts of the colour info into the buffer.
+	 */
+	add(b, c->colourinfo.tf);
+	add(b, c->colourinfo.tb);
+	if (c->colourinfo.tf == 1) {
+		add(b, c->colourinfo.fr);
+		add(b, c->colourinfo.fg);
+		add(b, c->colourinfo.fb);
+		
+	}
+	if (c->colourinfo.tb == 1) {
+		add(b, c->colourinfo.br);
+		add(b, c->colourinfo.bg);
+		add(b, c->colourinfo.bb);
+		
+	}
+}		  
+
 static void makeliteral_cc(struct buf *b, termchar *c, unsigned long *state)
 {
     /*
@@ -686,6 +718,7 @@ static unsigned char *compressline(termline *ldata)
      */
     makerle(b, ldata, makeliteral_chr);
     makerle(b, ldata, makeliteral_attr);
+	makerle(b, ldata, makeliteral_colourinfo);
     makerle(b, ldata, makeliteral_cc);
 
     /*
@@ -831,6 +864,40 @@ static void readliteral_attr(struct buf *b, termchar *c, termline *ldata,
 
     c->attr = attr;
 }
+
+static void readliteral_colourinfo(struct buf *b, termchar *c, termline *ldata,
+	unsigned long *state)
+	 {
+	c->colourinfo.tf = get(b);
+	c->colourinfo.tb = get(b);
+	
+		if (c->colourinfo.tf == 1) {
+		c->colourinfo.fr = get(b);
+		c->colourinfo.fg = get(b);
+		c->colourinfo.fb = get(b);
+		
+	}
+	else {
+		c->colourinfo.fr = 0;
+		c->colourinfo.fg = 0;
+		c->colourinfo.fb = 0;
+	}
+	if (c->colourinfo.tb == 1) {
+		c->colourinfo.br = get(b);
+		c->colourinfo.bg = get(b);
+		c->colourinfo.bb = get(b);
+		
+	}
+	else {
+		c->colourinfo.br = 0;
+		c->colourinfo.bg = 0;
+		c->colourinfo.bb = 0;
+		
+	}
+}		  
+
+
+
 static void readliteral_cc(struct buf *b, termchar *c, termline *ldata,
 			   unsigned long *state)
 {
@@ -904,6 +971,7 @@ static termline *decompressline(unsigned char *data, int *bytes_used)
      */
     readrle(b, ldata, readliteral_chr);
     readrle(b, ldata, readliteral_attr);
+	readrle(b, ldata, readliteral_colourinfo);
     readrle(b, ldata, readliteral_cc);
 
     /* Return the number of bytes read, for diagnostic purposes. */
@@ -1656,6 +1724,17 @@ Terminal *term_init(Conf *myconf, struct unicode_data *ucsdata,
     term->basic_erase_char.chr = CSET_ASCII | ' ';
     term->basic_erase_char.attr = ATTR_DEFAULT;
     term->basic_erase_char.cc_next = 0;
+	colinfo unused_black;
+	unused_black.tb = 0;
+	unused_black.tf = 0;
+	unused_black.fr = 0;
+	unused_black.fg = 0;
+	unused_black.fb = 0;
+	unused_black.br = 0;
+	unused_black.bg = 0;
+	unused_black.bb = 0;
+	term->basic_erase_char.colourinfo = unused_black;
+
     term->erase_char = term->basic_erase_char;
 
     return term;
@@ -3227,6 +3306,7 @@ static void term_out(Terminal *term)
 			clear_cc(cline, term->curs.x);
 			cline->chars[term->curs.x].chr = c;
 			cline->chars[term->curs.x].attr = term->curr_attr;
+			cline->chars[term->curs.x].colourinfo = term->curr_colourinfo;
 
 			term->curs.x++;
 
@@ -3234,6 +3314,7 @@ static void term_out(Terminal *term)
 			clear_cc(cline, term->curs.x);
 			cline->chars[term->curs.x].chr = UCSWIDE;
 			cline->chars[term->curs.x].attr = term->curr_attr;
+			cline->chars[term->curs.x].colourinfo = term->curr_colourinfo;
 
 			break;
 		      case 1:
@@ -3244,6 +3325,7 @@ static void term_out(Terminal *term)
 			clear_cc(cline, term->curs.x);
 			cline->chars[term->curs.x].chr = c;
 			cline->chars[term->curs.x].attr = term->curr_attr;
+			cline->chars[term->curs.x].colourinfo = term->curr_colourinfo;
 
 			break;
 		      case 0:
@@ -3813,6 +3895,7 @@ static void term_out(Terminal *term)
 				switch (def(term->esc_args[i], 0)) {
 				  case 0:	/* restore defaults */
 				    term->curr_attr = term->default_attr;
+					term->curr_colourinfo = term->basic_erase_char.colourinfo;
 				    break;
 				  case 1:	/* enable bold */
 				    compatibility(VT100AVO);
@@ -3882,6 +3965,7 @@ static void term_out(Terminal *term)
 				  case 36:
 				  case 37:
 				    /* foreground */
+					term->curr_colourinfo.tf = 0;
 				    term->curr_attr &= ~ATTR_FGMASK;
 				    term->curr_attr |=
 					(term->esc_args[i] - 30)<<ATTR_FGSHIFT;
@@ -3913,6 +3997,7 @@ static void term_out(Terminal *term)
 				  case 46:
 				  case 47:
 				    /* background */
+					term->curr_colourinfo.tb = 0;
 				    term->curr_attr &= ~ATTR_BGMASK;
 				    term->curr_attr |=
 					(term->esc_args[i] - 40)<<ATTR_BGSHIFT;
@@ -3944,6 +4029,14 @@ static void term_out(Terminal *term)
 					     << ATTR_FGSHIFT);
 					i += 2;
 				    }
+					if (i + 4 < term->esc_nargs &&
+						term->esc_args[i + 1] == 2) { // REAL truecolor
+						term->curr_colourinfo.tf = 1;
+						term->curr_colourinfo.fr = term->esc_args[i + 2];
+						term->curr_colourinfo.fg = term->esc_args[i + 3];
+						term->curr_colourinfo.fb = term->esc_args[i + 4];
+						i += 4;
+					}
 				    break;
 				  case 48:   /* xterm 256-colour mode */
 				    if (i+2 < term->esc_nargs &&
@@ -3954,6 +4047,15 @@ static void term_out(Terminal *term)
 					     << ATTR_BGSHIFT);
 					i += 2;
 				    }
+					if (i + 4 < term->esc_nargs &&
+						term->esc_args[i + 1] == 2) { // REAL truecolor
+						term->curr_colourinfo.tb = 1;
+						term->curr_colourinfo.br = term->esc_args[i + 2];
+						term->curr_colourinfo.bg = term->esc_args[i + 3];
+						term->curr_colourinfo.bb = term->esc_args[i + 4];
+						i += 4;
+						
+					}
 				    break;
 				}
 			    }
@@ -5116,6 +5218,7 @@ static void do_paint(Terminal *term, Context ctx, int may_optimise)
 	 */
 	for (j = 0; j < term->cols; j++) {
 	    unsigned long tattr, tchar;
+		colinfo colourinfo;
 	    termchar *d = lchars + j;
 	    scrpos.x = backward ? backward[j] : j;
 
@@ -5125,6 +5228,8 @@ static void do_paint(Terminal *term, Context ctx, int may_optimise)
             if (!term->ansi_colour)
                 tattr = (tattr & ~(ATTR_FGMASK | ATTR_BGMASK)) | 
                 ATTR_DEFFG | ATTR_DEFBG;
+
+			colourinfo = d->colourinfo;
 
 	    if (!term->xterm_256_colour) {
 		int colour;
@@ -5234,6 +5339,7 @@ static void do_paint(Terminal *term, Context ctx, int may_optimise)
 	    /* FULL-TERMCHAR */
 	    newline[j].attr = tattr;
 	    newline[j].chr = tchar;
+		newline[j].colourinfo = colourinfo;
 	    /* Combining characters are still read from lchars */
 	    newline[j].cc_next = 0;
 	}
@@ -5284,6 +5390,9 @@ static void do_paint(Terminal *term, Context ctx, int may_optimise)
 				  term->disptext[i]->lattr);
 	term->disptext[i]->lattr = ldata->lattr;
 
+	colinfo last_colourinfo = term->erase_char.colourinfo;
+	colinfo colourinfo = term->erase_char.colourinfo;
+
 	for (j = 0; j < term->cols; j++) {
 	    unsigned long tattr, tchar;
 	    int break_run, do_copy;
@@ -5291,6 +5400,20 @@ static void do_paint(Terminal *term, Context ctx, int may_optimise)
 
 	    tattr = newline[j].attr;
 	    tchar = newline[j].chr;
+
+		if (newline[j].colourinfo.tf != colourinfo.tf ||
+			newline[j].colourinfo.tb != colourinfo.tb ||
+			newline[j].colourinfo.fr != colourinfo.fr ||
+			newline[j].colourinfo.fg != colourinfo.fg ||
+			newline[j].colourinfo.fb != colourinfo.fb ||
+			newline[j].colourinfo.br != colourinfo.br ||
+			newline[j].colourinfo.bg != colourinfo.bg ||
+			newline[j].colourinfo.bb != colourinfo.bb
+			 ) {
+			last_colourinfo = newline[j].colourinfo;
+			break_run = TRUE;
+			
+		}
 
 	    if ((term->disptext[i]->chars[j].attr ^ tattr) & ATTR_WIDE)
 		dirty_line = TRUE;
@@ -5330,14 +5453,15 @@ static void do_paint(Terminal *term, Context ctx, int may_optimise)
 	    if (break_run) {
 		if ((dirty_run || last_run_dirty) && ccount > 0) {
 		    do_text(ctx, start, i, ch, ccount, attr,
-			    ldata->lattr);
+			    ldata->lattr, colourinfo);
 		    if (attr & (TATTR_ACTCURS | TATTR_PASCURS))
 			do_cursor(ctx, start, i, ch, ccount, attr,
-				  ldata->lattr);
+				  ldata->lattr, colourinfo);
 		}
 		start = j;
 		ccount = 0;
 		attr = tattr;
+		colourinfo = newline[j].colourinfo;
 		cset = CSET_OF(tchar);
 		if (term->ucsdata->dbcs_screenfont)
 		    last_run_dirty = dirty_run;
@@ -5406,6 +5530,7 @@ static void do_paint(Terminal *term, Context ctx, int may_optimise)
 		copy_termchar(term->disptext[i], j, d);
 		term->disptext[i]->chars[j].chr = tchar;
 		term->disptext[i]->chars[j].attr = tattr;
+		term->disptext[i]->chars[j].colourinfo = colourinfo;
 		if (start == j)
 		    term->disptext[i]->chars[j].attr |= DATTR_STARTRUN;
 	    }
@@ -5428,10 +5553,10 @@ static void do_paint(Terminal *term, Context ctx, int may_optimise)
 	}
 	if (dirty_run && ccount > 0) {
 	    do_text(ctx, start, i, ch, ccount, attr,
-		    ldata->lattr);
+		    ldata->lattr, colourinfo);
 	    if (attr & (TATTR_ACTCURS | TATTR_PASCURS))
 		do_cursor(ctx, start, i, ch, ccount, attr,
-			  ldata->lattr);
+			  ldata->lattr, colourinfo);
 	}
 
 	unlineptr(ldata);
